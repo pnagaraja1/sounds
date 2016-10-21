@@ -10,28 +10,23 @@ text2voice = 'espeak'
 sounds_dir = 'sounds'
 filetype = 'mp3'
 debug = True
-bots_channel = 'play'
+bots_channel = 'build'
 
-play_regex = re.compile("^play\s([a-z0-9]+)$")
-speak_regex = re.compile("^speak\s([a-zA-Z0-9.,'!?\- ]+)$")
-play_yt_regex = re.compile("^play-yt\s<?(https?:\/\/[a-z./]*\?v=[a-zA-Z0-9_-]*)>?(\s([0-9.]*)\s([0-9.]*)$)?")
-# lol that above regex matches the pattern:
-#     play-yt <yt video url> <start> <duration>
-# start and duration are optional
+play_fixed = re.compile("FIXED")
+play_cancelled = re.compile("CANCELLED")
+play_failed = re.compile("FAILED")
+play_broken = re.compile("BROKEN")
+play_building = re.compile("BUILDING")
+
 add_sound_regex = re.compile("^add-sound\s([a-z0-9]+)\s<?(https?:\/\/[a-z./]*\?v=[a-zA-Z0-9_-]*)>?(\s([0-9.]*)\s([0-9.]*)$)?")
-# lol that above regex matches the pattern:
-#     add-sound <token> <yt video url> <start> <duration>
-# start and duration are optional
 
 def action(command, message):
     global debug
     global sc
     global bots_channel
 
-    print message
-    print bots_channel
     sc.rtm_send_message(bots_channel, message)
-    if debug: print 'Running command: ' + command
+    if debug: print ('Running command: ' + command)
     os.system(command)
 
 whitelist = {}
@@ -40,20 +35,16 @@ with open(os.path.join(base_dir, 'whitelist.txt')) as f:
         (name, identifier) = line.split()
         whitelist[identifier] = name
 
-print "Whitelist:"
-print whitelist
-
 f = open(os.path.join(base_dir, 'token.txt'))
 token = f.readline().rstrip()
 f.close()
 
-print "Connecting using token " + token
+print ("Connecting using token " + token)
 sc = SlackClient(token)
 
 if sc.rtm_connect():
     while True:
-        for event in sc.rtm_read():
-            print event
+        for event in sc .rtm_read():
             if 'type' in event and event['type'] == 'message' and 'text' in event:
                 if ('user' in event and event['user'] in whitelist.keys()):
                     user = whitelist[event['user']]
@@ -62,27 +53,38 @@ if sc.rtm_connect():
                 else:
                     user = False
                 if user:
-                    if debug: print "Parsing message from " + user + ": '" + event['text'] + "'"
-                    play_match = play_regex.match(event['text'])
-                    speak_match = speak_regex.match(event['text'])
-                    play_yt_match = play_yt_regex.match(event['text'])
-                    add_sound_match = add_sound_regex.match(event['text'])
+                    if debug: print ("Parsing message from " + user + ": '" + event['attachments'][0]['fallback'] + "'")
+                    add_sound_match = add_sound_regex.match(event['attachments'][0]['fallback'])
+                    fixed = play_fixed.search(event['attachments'][0]['fallback'])
+                    cancelled = play_cancelled.search(event['attachments'][0]['fallback'])
+                    failed = play_failed.search(event['attachments'][0]['fallback'])
+                    broken = play_broken.search(event['attachments'][0]['fallback'])
+                    building = play_building.search(event['attachments'][0]['fallback'])
 
-                    if play_match:
-                        message = user + ' plays ' + play_match.group(1)
-                        print message
-                        print play_match.group(1)
-                        sound_file = os.path.join(base_dir, sounds_dir, play_match.group(1) + '.' + filetype)
+                    if fixed:
+                        message = user + ' FIXED '
+                        sound_file = os.path.join(base_dir, sounds_dir, 'dai' + '.' + filetype)
                         command = player + ' ' + sound_file
                         action(command, message)
-                    elif speak_match:
-                        message = user + ' speaks ' + speak_match.group(1)
-                        command = text2voice + ' "' + speak_match.group(1) + '"'
+                    elif cancelled:
+                        message = user + ' CANCELLED '
+                        sound_file = os.path.join(base_dir, sounds_dir, 'noooo' + '.' + filetype)
+                        command = player + ' ' + sound_file
                         action(command, message)
-                    elif play_yt_match:
-                        message = user + ' plays youtube video ' + play_yt_match.group(1)
-                        command = os.path.join(base_dir, 'yt-audio.sh') + ' ' + play_yt_match.group(1)
-                        if play_yt_match.group(2): command += play_yt_match.group(2)
+                    elif failed:
+                        message = user + ' FAILED '
+                        sound_file = os.path.join(base_dir, sounds_dir, 'heygirl' + '.' + filetype)
+                        command = player + ' ' + sound_file
+                        action(command, message)
+                    elif broken:
+                        message = user + ' BROKEN '
+                        sound_file = os.path.join(base_dir, sounds_dir, 'horror' + '.' + filetype)
+                        command = player + ' ' + sound_file
+                        action(command, message)
+                    elif building:
+                        message = user + ' BUILDING '
+                        sound_file = os.path.join(base_dir, sounds_dir, 'dangerzone' + '.' + filetype)
+                        command = player + ' ' + sound_file
                         action(command, message)
                     elif add_sound_match:
                         message = user + ' adds sound ' + add_sound_match.group(1) + ' from youtube video ' + add_sound_match.group(2)
@@ -91,4 +93,4 @@ if sc.rtm_connect():
                         action(command, message)
         time.sleep(1);
 else:
-    print 'Connection failed, invalid token?'
+    print ('Connection failed, invalid token?')
